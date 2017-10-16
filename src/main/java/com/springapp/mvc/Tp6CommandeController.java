@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
+import org.springframework.validation.DataBinder;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
@@ -23,7 +24,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
-import javax.validation.Valid;
+import javax.validation.*;
 import java.io.IOException;
 import java.util.*;
 
@@ -32,6 +33,8 @@ import java.util.*;
  */
 @Controller
 public class Tp6CommandeController extends HttpServletBean {
+    private DataBinder validator;
+
     private Log log = LogFactory.getLog(Tp6ClientController.class);
 
     @Autowired
@@ -68,16 +71,15 @@ public class Tp6CommandeController extends HttpServletBean {
         if ("ancienClient".equals(choixNouveauClient)) {
             /* Récupération de l'id du client choisi */
             String idAncienClient = httpServletRequest.getParameter("listeClients");
-            Long id = null;
+            Long id ;
                 try {
                     id = Long.parseLong(idAncienClient);
                 } catch (NumberFormatException e) {
                     e.getLocalizedMessage();
                     id = 0L;
                 }
-          /* Récupération de l'objet client correspondant dans
-la session */
-            System.out.println("id du client en session :" +id);
+             /* Récupération de l'objet client correspondant dans la session */
+            System.out.println("id du client en session :" + id);
             session = httpServletRequest.getSession();
             if(id != 0) {
                 client = ((Map<Long, Client>) session.getAttribute("clients")).get(id);
@@ -93,37 +95,19 @@ la session */
                 id = 0L;
             }
 
+            ValidatorFactory  validatorFactory = Validation.buildDefaultValidatorFactory();
+            Validator  validator = validatorFactory.getValidator();
+            Set<ConstraintViolation<Client>>  client_constraintViolations = validator.validate(client);
+            Set<ConstraintViolation<Commande>>  commande_constraintViolations = validator.validate(commande);
             /*=========================TRAITEMENT DU COMMANDE=======================*/
-             String  bindingToString = String.valueOf( bindingResult.hasErrors());
-            System.out.println("value of binding : " + bindingToString);
-            if((bindingResult.hasErrors() && !targetStr.contains("Commande") && id == 0 ) || id == 0 ||!targetStr.contains("Commande")){
-                if(id == 0){
-                    String message = "Le Client ne doit pas etre null";
-                    fieldError = bindingResult.getFieldError();
-                    bindingResult.reject("code", ""+message+"");
+
+                if (client_constraintViolations.size() > 0 && commande_constraintViolations.size() > 0 ){
+                    return "creerCommande";
+                }else if (client_constraintViolations.size() > 0  && commande_constraintViolations.size() == 0){
+                    return "creerCommande";
+                }else if (client_constraintViolations.size() == 0  && commande_constraintViolations.size() > 0){
                     return "creerCommande";
                 }
-                populateError("montant", model, bindingResult);
-                populateError("modePaiement", model, bindingResult);
-                populateError("statutPaiement", model, bindingResult);
-                populateError("modeLivraison", model, bindingResult);
-                populateError("statutLivraison", model, bindingResult);
-                return "creerCommande";
-            }else if(!bindingResult.hasErrors() && id == 0) {
-                populateError("montant", model, bindingResult);
-                populateError("modePaiement", model, bindingResult);
-                populateError("statutPaiement", model, bindingResult);
-                populateError("modeLivraison", model, bindingResult);
-                populateError("statutLivraison", model, bindingResult);
-                return "creerCommande";
-            }else if(bindingResult.hasErrors() && id != 0 && !targetStr.contains("Commande")) {
-                populateError("montant", model, bindingResult);
-                populateError("modePaiement", model, bindingResult);
-                populateError("statutPaiement", model, bindingResult);
-                populateError("modeLivraison", model, bindingResult);
-                populateError("statutLivraison", model, bindingResult);
-                return "creerCommande";
-            }else {
                 session = httpServletRequest.getSession();
                 Map<Long, Client> clients = (HashMap<Long, Client>) session.getAttribute("clients");
                 if (clients == null) {
@@ -133,7 +117,7 @@ la session */
                         clients.put(client1.getId(), client1);
                     }
                     session.setAttribute("clients", clients);
-                }
+                }else{
                   /* Ensuite récupération de la map des commandes dans la session */
                 Map<Long, Commande> commandes = (HashMap<Long,
                         Commande>) session.getAttribute("commandes");
@@ -147,10 +131,9 @@ la session */
                     }
                     /* Et enfin (ré)enregistrement de la map en session */
                     session.setAttribute("commandes", commandes);
-
                 }
                 System.out.println("email after set :" + commande.getClient().getEmail());
-                if(commande.getDate() != null && !bindingResult.hasErrors()) {
+                System.out.println("target :"+bindingResult.hasFieldErrors());
                     commandeDao.creer(commande);
 
                 /*modifier les valeurs des données du commande*/
@@ -171,14 +154,7 @@ la session */
                     model.addAttribute("client", client);
                     model.addAttribute("commande", commande);
                     return "afficherCommande";
-                }else {
-                    session.setAttribute("clients", clients);
-                    session.setAttribute("commandes", commandes);
-                    model.addAttribute("commande", commande);
-                    model.addAttribute("client", commande.getClient());
-                    return "creerCommande";
                 }
-            }
             /*======================================================================*/
         } else {
             //
@@ -191,19 +167,23 @@ la session */
             List<String> fileNames = new ArrayList<String>();
             String imageurl = tp6ClientController.validationImages(files, fileNames, httpServletRequest, client, session);
            // tp6ClientController.clientValidation(bindingResult, email_field_errors, email, clientDao, fieldError);
+            ValidatorFactory  validatorFactory = Validation.buildDefaultValidatorFactory();
+            Validator  validator = validatorFactory.getValidator();
+            Set<ConstraintViolation<Client>>  client_constraintViolations = validator.validate(client);
+            Set<ConstraintViolation<Commande>>  commande_constraintViolations = validator.validate(commande);
 
-            if (bindingResult.hasErrors() || tp6ClientController.clientValidation(bindingResult, email_field_errors, email,  clientDao, fieldError)) {
-                /*error handling*/
-                populateError("client", model, bindingResult);
-                populateError("montant", model, bindingResult);
-                populateError("modePaiement", model, bindingResult);
-                populateError("statutPaiement", model, bindingResult);
-                populateError("modeLivraison", model, bindingResult);
-                populateError("statutLivraison", model, bindingResult);
-                //end
-                System.out.println("Il y  une erreur !" + bindingResult.getFieldError());
+            if (client_constraintViolations.size() > 0 && commande_constraintViolations.size() > 0 ){
+
                 return "creerCommande";
+            }else if (client_constraintViolations.size() > 0  && commande_constraintViolations.size() == 0){
+
+                return "creerCommande";
+            }else if (client_constraintViolations.size() == 0  && commande_constraintViolations.size() > 0){
+
+                return "creerCommande";
+                //end of the new validation //
             } else {
+
                  /*modification des valeurs de donnée du client*/
                 client.setId(commande.getClient().getId());
                 client.setNom(commande.getClient().getNom());
@@ -238,11 +218,11 @@ la session */
                 }
                     /* Et enfin (ré)enregistrement de la map en session */
                 session.setAttribute("commandes", commandes);
-
             }
                 System.out.println("email after set :" + commande.getClient().getEmail());
-                if ( commande.getDate() != null && !bindingResult.hasErrors()) {
-                    commandeDao.creer(commande);
+                boolean  isNotNull = bindingResult.getTarget().equals(commande);
+                System.out.println("target :" + isNotNull);
+                commandeDao.creer(commande);
 
                 /*modifier les valeurs des données du commande*/
                     commande.setId(commande.getId());
@@ -258,28 +238,14 @@ la session */
                     session.setAttribute("commandes", commandes);
                     commandes.put(commande.getId(), commande);
                     System.out.println("succès de la creation !" + " commandes date :" + commande.getDate());
-                /*insertion des information concernants le client dans la base après validation*/
+                    /*insertion des information concernants le client dans la base après validation*/
                     model.addAttribute("client", client);
                     model.addAttribute("commande", commande);
                     return "afficherCommande";
-                }else {
-                    session.setAttribute("clients", clients);
-                    session.setAttribute("commandes", commandes);
-                    model.addAttribute("commande", commande);
-                    model.addAttribute("client", commande.getClient());
-                    return "creerCommande";
                 }
             }
+         return "afficherCommande";
         }
-    }
-
-    private void populateError(String field, Model model, BindingResult bindingResult) {
-        if (bindingResult.hasFieldErrors(field)) {
-            model.addAttribute(field + "Error", bindingResult.getFieldError(field).getDefaultMessage());
-        }
-
-    }
-
 
     @RequestMapping(value = "/listerCommande")
     public String listerCommandes(HttpServletRequest  httpServletRequest, Model model){
